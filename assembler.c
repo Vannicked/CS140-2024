@@ -22,7 +22,7 @@ void parse_L_command(const char *src, map symbolTable, int nextLine){
     char buffer3[10];
     string_splitter(src, buffer2, buffer, '(');
     string_splitter(buffer, label, buffer2, ')');
-    sprintf(buffer3, "%d", nextLine + 1);
+    sprintf(buffer3, "%d", nextLine);
     insertKey(symbolTable, label, buffer3);
 }
 
