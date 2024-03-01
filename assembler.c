@@ -2,391 +2,116 @@
 #include <stdlib.h>
 #include <ctype.h>
 #include <string.h>
+#include "map.h"
 
+int memoryCounter = 16;
 
-// Checklist
-// open a file
-// create our own version of strcpy that copies a line using the constraints of a compiler
-//      remove spaces (isspace), stop at '//', make sure to zero out memory ( dest[i] = source[i]; )
-//      use pointers rather than indexing arrays
-
-
-// cuts strings at equal sign
-void cut_string_at_equal(const char *str, char *part1, char *part2) {
-  const char *equal_sign = strchr(str, '=');
-
-  // Check if there's an '=' sign
-  if (equal_sign == NULL) {
-    // No '=' found, copy the entire string to part1 and leave part2 empty
-    strcpy(part1, str);
-    part2[0] = '\0';
-    return;
-  }
-
-  // Copy the part before the '=' sign (excluding the '=')
-  strncpy(part1, str, equal_sign - str);
-  part1[equal_sign - str] = '\0'; // Add null terminator
-
-  // Copy the part after the '=' sign (including the '=')
-  strcpy(part2, equal_sign);
+void string_splitter(const char *str, char *part1, char *part2, char search) {
+    const char *index = strchr(str, search);
+    // Copy the part before the search sign
+    strncpy(part1, str, index - str);
+    part1[index - str] = '\0'; // Add null terminator
+    // Copy the part after the search sign
+    strcpy(part2, index + 1);
 }
 
-void cut_string_at_semi(const char *str, char *part1, char *part2) {
-  const char *semi_sign = strchr(str, ';');
-
-  // Check if there's an '=' sign
-  if (semi_sign == NULL) {
-    // No '=' found, copy the entire string to part1 and leave part2 empty
-    strcpy(part1, str);
-    part2[0] = '\0';
-    return;
-  }
-
-  // Copy the part before the '=' sign (excluding the '=')
-  strncpy(part1, str, semi_sign - str);
-  part1[semi_sign - str] = '\0'; // Add null terminator
-
-  // Copy the part after the '=' sign (including the '=')
-  strcpy(part2, semi_sign);
+void parse_L_command(const char *src, map symbolTable, int nextLine){
+    char label[100];
+    char buffer[100];
+    char buffer2[10];
+    char buffer3[10];
+    string_splitter(src, buffer2, buffer, '(');
+    string_splitter(buffer, label, buffer2, ')');
+    sprintf(buffer3, "%d", nextLine + 1);
+    insertKey(symbolTable, label, buffer3);
 }
 
 
+void parse_A_command(const char *src, const map symbolTable, char *hackFinal) {
+    // remove @ sign
+    char assemblyLine[100];
+    char buffer[10];
+    string_splitter(src, buffer, assemblyLine, '@');
+    int srcInt;
+    // 0 or int
+    if(atoi(assemblyLine) != 0 || assemblyLine[0] == '0'){
+        srcInt = atoi (assemblyLine);
+    }
+    // label or symbol
+    else if(containsKey(symbolTable, assemblyLine)>=0){
+        srcInt = atoi (lookupKey(symbolTable, assemblyLine));
+    }
+    else{
+        char buffer3[10];
+        sprintf(buffer3, "%d", memoryCounter);
+        insertKey(symbolTable, assemblyLine, buffer3);
+        srcInt = memoryCounter;
+        memoryCounter++;
+    }
 
-char *parseAcommand(char *hackline, const char *src) {
-
-// char array of length 16 (initiallizes the first line of command)
-char newline[16];
-newline[0] = '0';
-// whatever number is given in binary just input binary number
-
+    char hackLine[17];
+    int n = 15;
+    hackLine[16] = '\0';
+    hackLine[0]='0';
+    while(n>0){
+        hackLine[n] = '0';
+        hackLine[n] = srcInt%2 + '0';
+        srcInt = srcInt/2;
+        n--;
+    }
+    strcpy(hackFinal, hackLine);
 }
 
-
-char *parseCcommand(char *hackline, const char *src) {
-
-    // begin the C command hack string
-    char newline[16];
+void parse_C_command(const char *src, const map compMap, const map jumpMap, char *hackFinal) {
+    // always starts 111
+    char hackLine[20];
+    strcpy(hackLine, "111");
     char dest[10];
+    char comp[10];
     char jump[10];
-    char extra[10];
-    newline[0] = '1';
-    newline[1] = '1';
-    newline[2] = '1';
-
-
-    // DESTINATIONS
-    // for spaces 10, 11, and 12...if statements for the destinations (if there's no '=' then there's no destination)
-
-    if (strstr(src, "=") != NULL) { // if it contains '='
-
-        cut_string_at_equal(src, dest, extra);
-
-        if (strstr(dest, 'M') != NULL) {// if M exists
-        
-            newline[12] = '1';
-        
+    // determine structure
+    if(strstr(src, "=") != NULL){ // dest=comp
+        // split dest and comp
+        string_splitter(src, dest, comp, '=');
+        // add comp bits
+        strcat(hackLine, lookupKey(compMap, comp));
+        // add dest bits
+        if(strstr(dest, "A")){
+            strcat(hackLine, "1");
         }
-        if (strstr(dest, 'A') != NULL) {// if A exists
-        
-            newline[10] = '1';
-        
+        else{
+            strcat(hackLine, "0");
         }
-        if (strstr(dest, 'D') != NULL) {// if D exists
-        
-            newline[11] = '1';
-        
+        if(strstr(dest, "D")){
+            strcat(hackLine, "1");
         }
-    // check for the destination options and give the binary for each
-        
+        else{
+            strcat(hackLine, "0");
+        }
+        if(strstr(dest, "M")){
+            strcat(hackLine, "1");
+        }
+        else{
+            strcat(hackLine, "0");
+        }
+        // add jump bits
+        strcat(hackLine, "000");
+    }
+    else if(strstr(src, ";") != NULL){// comp;jmp
+        // split comp and jump
+        string_splitter(src, comp, jump, ';');
+        // add comp bits
+        strcat(hackLine, lookupKey(compMap, comp));
+        //add dest bits
+        strcat(hackLine,"000");
+        //add jump bits
+        strcat(hackLine, lookupKey(jumpMap, jump));
+    }
+
+    strcpy(hackFinal, hackLine);
 }
 
-
-    // for remaining spaces if there's no semi-colon then there's no jump
-        // use if statements for that
-    if (strstr(src, ';') != NULL) { // if it contains ';' 
-
-        cut_string_at_semi(src, jump, extra);
-
-        // COMPARISON (jump is the comparison)
-
-        if (strstr(jump, 'M') != NULL) {
-            newline[3] = '1';
-            if (str(jump == 'M')) {
-                newline[4] = '1';
-                newline[5] = '1';
-                newline[6] = '0';
-                newline[7] = '0';
-                newline[8] = '0';
-                newline[9] = '0';
-            }
-            if (str(jump == "!M")) {
-                newline[4] = '1';
-                newline[5] = '1';
-                newline[6] = '0';
-                newline[7] = '0';
-                newline[8] = '0';
-                newline[9] = '1';
-            }
-            if (str(jump == "-M")) {
-                newline[4] = '1';
-                newline[5] = '1';
-                newline[6] = '0';
-                newline[7] = '0';
-                newline[8] = '1';
-                newline[9] = '1';
-            }
-            if (str(jump == "M+1")) {
-                newline[4] = '1';
-                newline[5] = '1';
-                newline[6] = '0';
-                newline[7] = '1';
-                newline[8] = '1';
-                newline[9] = '1';
-            }
-            if (str(jump == "M-1")) {
-                newline[4] = '1';
-                newline[5] = '1';
-                newline[6] = '0';
-                newline[7] = '0';
-                newline[8] = '1';
-                newline[9] = '0';
-            }
-            if (str(jump == "D+M")) {
-                newline[4] = '0';
-                newline[5] = '0';
-                newline[6] = '0';
-                newline[7] = '0';
-                newline[8] = '1';
-                newline[9] = '0';
-            }
-            if (str(jump == "D-M")) {
-                newline[4] = '0';
-                newline[5] = '1';
-                newline[6] = '0';
-                newline[7] = '0';
-                newline[8] = '1';
-                newline[9] = '1';
-            }
-            if (str(jump == "M-D")) {
-                newline[4] = '0';
-                newline[5] = '0';
-                newline[6] = '0';
-                newline[7] = '1';
-                newline[8] = '1';
-                newline[9] = '1';
-            }
-            if (str(jump == "D&M")) {
-                newline[4] = '0';
-                newline[5] = '0';
-                newline[6] = '0';
-                newline[7] = '0';
-                newline[8] = '0';
-                newline[9] = '0';
-            }
-            if (str(jump == "D|M")) {
-                newline[4] = '0';
-                newline[5] = '1';
-                newline[6] = '0';
-                newline[7] = '1';
-                newline[8] = '0';
-                newline[9] = '1';
-            }
-            
-            }
-        else {
-
-            newline[3] = '0';
-
-            if (str(jump == '0')) {
-                newline[4] = '1';
-                newline[5] = '0';
-                newline[6] = '1';
-                newline[7] = '0';
-                newline[8] = '1';
-                newline[9] = '0'; 
-            }
-            if (str(jump == '1')) {
-                newline[4] = '1';
-                newline[5] = '1';
-                newline[6] = '1';
-                newline[7] = '1';
-                newline[8] = '1';
-                newline[9] = '1';
-            }
-            if (str(jump == "-1")) {
-                newline[4] = '1';
-                newline[5] = '1';
-                newline[6] = '1';
-                newline[7] = '0';
-                newline[8] = '1';
-                newline[9] = '0';
-            }
-            if (str(jump == 'D')) {
-                newline[4] = '0';
-                newline[5] = '0';
-                newline[6] = '1';
-                newline[7] = '1';
-                newline[8] = '0';
-                newline[9] = '0';
-            }
-            if (str(jump == 'A')) {
-                newline[4] = '1';
-                newline[5] = '1';
-                newline[6] = '0';
-                newline[7] = '0';
-                newline[8] = '0';
-                newline[9] = '0';
-            }
-            if (str(jump == "!D")) {
-                newline[4] = '0';
-                newline[5] = '0';
-                newline[6] = '1';
-                newline[7] = '1';
-                newline[8] = '1';
-                newline[9] = '1';
-            }
-            if (str(jump == "!A")) {
-                newline[4] = '1';
-                newline[5] = '1';
-                newline[6] = '0';
-                newline[7] = '0';
-                newline[8] = '1';
-                newline[9] = '1';
-            }
-            if (str(jump == "D+1")) {
-                newline[4] = '0';
-                newline[5] = '1';
-                newline[6] = '1';
-                newline[7] = '1';
-                newline[8] = '1';
-                newline[9] = '1';
-            }
-            if (str(jump == "A+1")) {
-                newline[4] = '1';
-                newline[5] = '1';
-                newline[6] = '0';
-                newline[7] = '1';
-                newline[8] = '1';
-                newline[9] = '1';
-            }
-            if (str(jump == "D-1")) {
-                newline[4] = '0';
-                newline[5] = '0';
-                newline[6] = '1';
-                newline[7] = '1';
-                newline[8] = '1';
-                newline[9] = '0';
-            }
-            if (str(jump == "A-1")) {
-                newline[4] = '1';
-                newline[5] = '1';
-                newline[6] = '0';
-                newline[7] = '0';
-                newline[8] = '1';
-                newline[9] = '0';
-            }
-            if (str(jump == "D+A")) {
-                newline[4] = '0';
-                newline[5] = '0';
-                newline[6] = '0';
-                newline[7] = '0';
-                newline[8] = '1';
-                newline[9] = '0';
-            }
-            if (str(jump == "D-A")) {
-                newline[4] = '0';
-                newline[5] = '1';
-                newline[6] = '0';
-                newline[7] = '0';
-                newline[8] = '1';
-                newline[9] = '1';
-            }
-            if (str(jump == "A-D")) {
-                newline[4] = '0';
-                newline[5] = '0';
-                newline[6] = '0';
-                newline[7] = '1';
-                newline[8] = '1';
-                newline[9] = '1';
-            }
-            if (str(jump == "D&A")) {
-                newline[4] = '0';
-                newline[5] = '0';
-                newline[6] = '0';
-                newline[7] = '0';
-                newline[8] = '0';
-                newline[9] = '0';
-            }
-            if (str(jump == "D|A")) {
-                newline[4] = '0';
-                newline[5] = '1';
-                newline[6] = '0';
-                newline[7] = '1';
-                newline[8] = '0';
-                newline[9] = '1';
-            }
-        
-
-        if (strstr(extra, "JGT") != NULL) {// if JGT exists (BUT MAJOR DIFFERECNE is that we take in what's after the split)
-        
-            newline[13] = '0';
-            newline[14] = '0';
-            newline[15] = '1';
-        
-        }
-        if (strstr(extra, "JEQ") != NULL) {// if JGT exists (BUT MAJOR DIFFERECNE is that we take in what's after the split)
-        
-            newline[13] = '0';
-            newline[14] = '1';
-            newline[15] = '0';
-        
-        }if (strstr(extra, "JGE") != NULL) {// if JGT exists (BUT MAJOR DIFFERECNE is that we take in what's after the split)
-        
-            newline[13] = '0';
-            newline[14] = '1';
-            newline[15] = '1';
-        
-        }if (strstr(extra, "JLT") != NULL) {// if JGT exists (BUT MAJOR DIFFERECNE is that we take in what's after the split)
-        
-            newline[13] = '1';
-            newline[14] = '0';
-            newline[15] = '0';
-        
-        }if (strstr(extra, "JNE") != NULL) {// if JGT exists (BUT MAJOR DIFFERECNE is that we take in what's after the split)
-        
-            newline[13] = '1';
-            newline[14] = '0';
-            newline[15] = '1';
-        
-        }if (strstr(extra, "JLE") != NULL) {// if JGT exists (BUT MAJOR DIFFERECNE is that we take in what's after the split)
-        
-            newline[13] = '1';
-            newline[14] = '1';
-            newline[15] = '0';
-        
-        }if (strstr(extra, "JMP") != NULL) {// if JGT exists (BUT MAJOR DIFFERECNE is that we take in what's after the split)
-        
-            newline[13] = '1';
-            newline[14] = '1';
-            newline[15] = '1';
-        
-        } else {
-            newline[13] = '0';
-            newline[14] = '0';
-            newline[15] = '0';
-        }
-    
-}
-    // newline[3] = anything compared to M is a 1 else 0
-    // for spaces 4 - 9 go through each if statement in the comparisons section
-
-    if (strstr(src, ';') != NULL)
-
-
-}
-
-
-char *strcpy_nospace(char *dest, const char *src) {
+void strcpy_nospace(char *dest, const char *src) {
 
     int i = 0; // array index
     int j = 0;
@@ -403,51 +128,125 @@ char *strcpy_nospace(char *dest, const char *src) {
 }
 
 
-int main(int argc, char** argv)
-{
+int main(int argc, char** argv){
 if (argc < 3) {
         puts("Less than 3 arguments detected");
         puts("Usage: ./assembler input.asm output.hack");
         return 0;
 }
+// building the comp map
+map compMap = createMap(100);
+insertKey(compMap, "0", "0101010");
+insertKey(compMap, "1", "0111111");
+insertKey(compMap, "-1", "0111010");
+insertKey(compMap, "D", "0001100");
+insertKey(compMap, "A", "0110000");
+insertKey(compMap, "!D", "0001101");
+insertKey(compMap, "!A", "0110001");
+insertKey(compMap, "-D", "0001111");
+insertKey(compMap, "-A", "0110011");
+insertKey(compMap, "D+1", "0011111");
+insertKey(compMap, "A+1", "0110111");
+insertKey(compMap, "D-1", "0001110");
+insertKey(compMap, "A-1", "0110010");
+insertKey(compMap, "D+A", "0000010");
+insertKey(compMap, "D-A", "0010011");
+insertKey(compMap, "A-D", "0000111");
+insertKey(compMap, "D&A", "0000000");
+insertKey(compMap, "D|A", "0010101");
+insertKey(compMap, "M", "1110000");
+insertKey(compMap, "!M", "1110001");
+insertKey(compMap, "-M", "1110011");
+insertKey(compMap, "M+1", "1110111");
+insertKey(compMap, "M-1", "1110010");
+insertKey(compMap, "D+M", "1000010");
+insertKey(compMap, "D-M", "1010011");
+insertKey(compMap, "M-D", "1000111");
+insertKey(compMap, "D&M", "1000000");
+insertKey(compMap, "D|M", "1010101");
 
+// building the jump map
+map jumpMap = createMap(10);
+insertKey(jumpMap,"JGT", "001");
+insertKey(jumpMap,"JEQ", "010");
+insertKey(jumpMap,"JGE", "011");
+insertKey(jumpMap,"JLT", "100");
+insertKey(jumpMap,"JNE", "101");
+insertKey(jumpMap,"JLE", "110");
+insertKey(jumpMap,"JMP", "111");
+//building symbol table
+map symbolTable = createMap(2000);
+insertKey(symbolTable,"R0","0");
+insertKey(symbolTable,"R1","1");
+insertKey(symbolTable,"R2","2");
+insertKey(symbolTable,"R3","3");
+insertKey(symbolTable,"R4","4");
+insertKey(symbolTable,"R5","5");
+insertKey(symbolTable,"R6","6");
+insertKey(symbolTable,"R7","7");
+insertKey(symbolTable,"R8","8");
+insertKey(symbolTable,"R9","9");
+insertKey(symbolTable,"R10","10");
+insertKey(symbolTable,"R11","11");
+insertKey(symbolTable,"R12","12");
+insertKey(symbolTable,"R13","13");
+insertKey(symbolTable,"R14","14");
+insertKey(symbolTable,"R15","15");
+insertKey(symbolTable,"SP","0");
+insertKey(symbolTable,"LCL","1");
+insertKey(symbolTable,"ARG","2");
+insertKey(symbolTable,"THIS","3");
+insertKey(symbolTable,"THAT","4");
+insertKey(symbolTable,"SCREEN","16384");
+insertKey(symbolTable,"KBD","24576");
 
-  FILE * pFile;
-  FILE * qFile;
-  char mystring[100];
-  char mystring2[100];
+// declaring files, strings, line counter, memory counter
+FILE * pFile;
+FILE * qFile;
+FILE * lFile;
+char mystring[100];
+char mystring2[100];
+int lineCounter = 0;
+char hackFinal[18];
 
-  pFile = fopen (argv[1] , "r");
-  qFile = fopen (argv[2], "w");
+pFile = fopen (argv[1] , "r");
+lFile = fopen (argv[1] , "r");
+qFile = fopen (argv[2], "w");
 
-  if (pFile == NULL) perror ("Error opening file");
-  else { 
-  while (fgets(mystring, 100, pFile) != NULL) {
-
-      strcpy_nospace(mystring2, mystring);
-
-        if (mystring2[0] == '@') {
-            fputs("A_COMMAND\n", qFile);
-        }
+if (pFile == NULL) perror ("Error opening file");
+else { 
+    // loop for l commands
+    while (fgets(mystring, 100, lFile) != NULL) {
+        strcpy_nospace(mystring2, mystring);
         if (mystring2[0] == '(') {
-            fputs("L_COMMAND\n", qFile);
+            parse_L_command(mystring2, symbolTable, lineCounter);
         }
-        if (mystring2[0] == 'D' || mystring2[0] == 'A' || mystring2[0] == 'M' || mystring2[0] == '0'){
-            fputs("C_COMMAND\n", qFile);
+        else if(mystring2[0] == '@' || mystring2[0] == 'D' || mystring2[0] == 'A' || mystring2[0] == 'M' || mystring2[0] == '0'){
+            lineCounter++;
         }
     }
-    fclose (pFile);
-    fclose (qFile);
+    // loop for a and c commands
+    while (fgets(mystring, 100, pFile) != NULL) {
 
-  } 
-  return 0;
-  // char c [100];
-  // strcpy_nospace(c, "This is a string with spaces");
-  // puts(c);
+        strcpy_nospace(mystring2, mystring);
 
+        if (mystring2[0] == '@') {
+            parse_A_command(mystring2, symbolTable, hackFinal);
+            fputs(hackFinal, qFile);
+            fputs("\n", qFile);        
+        }
+        if (mystring2[0] == 'D' || mystring2[0] == 'A' || mystring2[0] == 'M' || mystring2[0] == '0'){
+            // fputs("PARSED C\n", qFile);
+            parse_C_command(mystring2, compMap, jumpMap, hackFinal);
+            fputs(hackFinal, qFile);
+            fputs("\n", qFile);
+        }
+    }
+        fclose (pFile);
+        fclose (qFile);
+        freeMap(compMap);
+        freeMap(symbolTable);
+        freeMap(jumpMap);
+}    
+return 0;
 }
-
-// int main() {
-//     printf("Hello, World!");
-//     return 0;
-// }
